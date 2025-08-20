@@ -1,0 +1,143 @@
+name: Build and Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 切换分支
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust Nightly 版本
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-gnu,i686-pc-windows-gnu,x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
+          components: rustfmt, clippy
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64 \
+            gcc-aarch64-linux-gnu \
+            gcc-mipsel-linux-gnu \
+            zstd \
+            libc6-dev-arm64-cross
+
+      - name: 配置 Cargo
+        run: |
+          mkdir -p $HOME/.cargo
+          cat <<EOF > $HOME/.cargo/config.toml
+          [build]
+          target = "x86_64-unknown-linux-gnu"
+
+          [target.x86_64-pc-windows-gnu]
+          linker = "x86_64-w64-mingw32-gcc"
+          [target.i686-pc-windows-gnu]
+          linker = "i686-w64-mingw32-gcc"
+          [target.x86_64-unknown-linux-gnu]
+          linker = "x86_64-linux-gnu-gcc"
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          ar = "aarch64-linux-gnu-ar"
+          EOF
+
+      - name: 编译 Windows x64 版本
+        run: cargo build --release --target x86_64-pc-windows-gnu
+        env:
+          CC_x86_64_pc_windows_gnu: x86_64-w64-mingw32-gcc
+          CXX_x86_64_pc_windows_gnu: x86_64-w64-mingw32-g++
+
+      - name: 编译 Windows x32 版本
+        run: cargo build --release --target i686-pc-windows-gnu
+        env:
+          CC_i686_pc_windows_gnu: i686-w64-mingw32-gcc
+          CXX_i686_pc_windows_gnu: i686-w64-mingw32-g++
+
+      - name: 编译 Linux x64 版本
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: 编译 Linux ARM64 版本
+        run: |
+          export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          cargo build --release --target aarch64-unknown-linux-gnu
+
+      - name: 编译适用于 MT7621 处理器的 MUSL 版本
+        run: |
+          wget https://downloads.openwrt.org/releases/24.10.2/targets/ramips/mt7621/openwrt-toolchain-24.10.2-ramips-mt7621_gcc-13.3.0_musl.Linux-x86_64.tar.zst 
+          tar --zstd -xvf openwrt-toolchain-*.tar.zst
+          
+          TOOLCHAIN_DIR="openwrt-toolchain-24.10.2-ramips-mt7621_gcc-13.3.0_musl.Linux-x86_64"
+          COMPILER_PATH="$TOOLCHAIN_DIR/toolchain-mipsel_24kc_gcc-13.3.0_musl/bin"
+          
+          if [ ! -f "$COMPILER_PATH/mipsel-openwrt-linux-musl-gcc" ]; then
+            echo "❌ Error: Cross compiler not found at $COMPILER_PATH"
+            ls -R $TOOLCHAIN_DIR
+            exit 1
+          fi
+          
+          if [ ! -f "src/main.c" ]; then
+            echo "❌ Error: Source file src/main.c not found in repository"
+            ls -R .
+            exit 1
+          fi
+          
+          export PATH="$COMPILER_PATH:$PATH"
+          mipsel-openwrt-linux-musl-gcc src/main.c -o wowlan-mt7621-musl -static -Os
+          
+          mkdir -p release-assets
+          cp wowlan-mt7621-musl release-assets/
+        shell: bash
+
+      - name: 准备发布资源
+        run: |
+          mkdir -p release-assets
+          cp target/x86_64-pc-windows-gnu/release/wowlan.exe release-assets/wowlan-windows-x64.exe
+          cp target/i686-pc-windows-gnu/release/wowlan.exe release-assets/wowlan-windows-x32.exe
+          cp target/x86_64-unknown-linux-gnu/release/wowlan release-assets/wowlan-linux-x64
+          cp target/aarch64-unknown-linux-gnu/release/wowlan release-assets/wowlan-linux-arm64
+          
+          echo "✅ Release assets:"
+          ls -lh release-assets/
+
+      - name: Generate release body
+        id: generate_body
+        run: |
+          cat <<EOF > body.md
+          WowLan 二进制程序
+          
+          Github Action 自动编译
+
+          ## 注释
+          
+          MT7621.MUSL 版本主要用于路由器，由于 Rust 对 Musl 支持有限，此架构使用 C-lang 编译。
+          
+          | 架构 | 文件大小 (MB) |
+          |------|---------------|
+          | Windows x64 | $(ls -l release-assets/wowlan-windows-x64.exe | awk '{printf "%.1f", $5/1048576}') |
+          | Windows x32 | $(ls -l release-assets/wowlan-windows-x32.exe | awk '{printf "%.1f", $5/1048576}') |
+          | Linux x64 | $(ls -l release-assets/wowlan-linux-x64 | awk '{printf "%.1f", $5/1048576}') |
+          | Linux arm64 | $(ls -l release-assets/wowlan-linux-arm64 | awk '{printf "%.1f", $5/1048576}') |
+          | MT7621.MUSL | $(ls -l release-assets/wowlan-mt7621-musl | awk '{printf "%.1f", $5/1048576}') |
+          EOF
+          echo "body_path=body.md" >> $GITHUB_OUTPUT
+
+      - name: 发布
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "WowLan ${{ github.ref_name }}"
+          body_path: ${{ steps.generate_body.outputs.body_path }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
