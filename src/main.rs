@@ -1,6 +1,6 @@
+use ipnetwork::IpNetwork;
 use std::env;
 use std::net::{IpAddr, UdpSocket};
-use ipnetwork::IpNetwork;
 
 /*
  * 错误类型
@@ -11,6 +11,7 @@ use ipnetwork::IpNetwork;
 enum ValidationError {
     Mac,
     Subnet,
+    IpV6NotSupported, 
 }
 
 fn main() {
@@ -55,7 +56,16 @@ fn main() {
     };
 
     let broadcast_addr = match get_broadcast_addr(subnet_str) {
-        Ok(addr) => Some(addr),
+        Ok(addr) => {
+            // 检查是否为IPv4地址
+            match addr {
+                IpAddr::V4(_) => Some(addr),
+                IpAddr::V6(_) => {
+                    validation_errors.push(ValidationError::IpV6NotSupported);
+                    None
+                }
+            }
+        },
         Err(_) => {
             validation_errors.push(ValidationError::Subnet);
             None
@@ -70,6 +80,9 @@ fn main() {
         }
         if validation_errors.contains(&ValidationError::Subnet) {
             error_parts.push("SubNet");
+        }
+        if validation_errors.contains(&ValidationError::IpV6NotSupported) {
+            error_parts.push("IPv6 Not Supported");
         }
         println!("ValueError: {}", error_parts.join(" and "));
         println!("{}", usage);
@@ -124,6 +137,12 @@ fn get_broadcast_addr(subnet_str: &str) -> Result<IpAddr, ()> {
 
 /// 发送 WOL 幻数据包
 fn send_magic_packet(mac: [u8; 6], broadcast_addr: IpAddr) -> Result<(), std::io::Error> {
+    // 确保是IPv4地址
+    let ipv4_addr = match broadcast_addr {
+        IpAddr::V4(addr) => addr,
+        IpAddr::V6(_) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "IPv6 addresses are not supported")),
+    };
+
     // 幻数据包
     let mut magic_packet = [0u8; 102];
 
@@ -136,11 +155,8 @@ fn send_magic_packet(mac: [u8; 6], broadcast_addr: IpAddr) -> Result<(), std::io
         magic_packet[start..start+6].copy_from_slice(&mac);
     }
 
-    // 绑定地址
-    let bind_addr = match broadcast_addr {
-        IpAddr::V4(_) => "0.0.0.0:0",
-        IpAddr::V6(_) => "[::]:0",
-    };
+    // 绑定地址 (只使用IPv4)
+    let bind_addr = "0.0.0.0:0";
 
     // UDP
     let socket = UdpSocket::bind(bind_addr)?;
@@ -149,7 +165,7 @@ fn send_magic_packet(mac: [u8; 6], broadcast_addr: IpAddr) -> Result<(), std::io
     socket.set_broadcast(true)?;
 
     // WOL UDP端口 9
-    let dest_addr = (broadcast_addr, 9);
+    let dest_addr = (ipv4_addr, 9);
 
     socket.send_to(&magic_packet, dest_addr)?;
 
