@@ -1,5 +1,6 @@
 <h1 align=center>WowLan</h1>
 <div align=center>简易的 WakeOnLan CLI 命令行工具</div>
+
 ## 使用方法
 1. 从 [Github Release](https://github.com/KirsminX/wowlan/releases) 下载最新发行版；
 2. 运行 WowLan：
