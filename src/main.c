@@ -126,17 +126,26 @@
          return ERROR_SOCKET;
      }
 
+     // 设置目标地址端口
+     struct sockaddr_in target_addr = *broadcast_addr;
+     target_addr.sin_port = htons(BROADCAST_PORT);
+
      // 发送数据包
      ssize_t sent = sendto(sock, magic_packet, sizeof(magic_packet), 0,
-                          (struct sockaddr*)broadcast_addr, sizeof(*broadcast_addr));
-
-     close(sock);
+                          (struct sockaddr*)&target_addr, sizeof(target_addr));
 
      if (sent != sizeof(magic_packet)) {
-         perror("sendto");
+         if (sent == -1) {
+             perror("sendto");
+             printf("Error code: %d, Message: %s\n", errno, strerror(errno));
+         } else {
+             fprintf(stderr, "sendto: sent %zd bytes instead of %zu\n", sent, sizeof(magic_packet));
+         }
+         close(sock);
          return ERROR_SOCKET;
      }
 
+     close(sock);
      return ERROR_NONE;
  }
 
