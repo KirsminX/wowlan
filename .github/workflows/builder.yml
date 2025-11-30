@@ -101,11 +101,13 @@ jobs:
           rustc --version
           cargo build --release
           
-          # 检查编译结果
+          # 检查编译结果 - 查找target/release目录下的可执行文件
           if [ -f "target/release/wowlan" ]; then
             cp target/release/wowlan release-assets/wowlan-rust
+          elif [ -f "target/release/wowlan.exe" ]; then
+            cp target/release/wowlan.exe release-assets/wowlan-rust
           else
-            echo "❌ Error: Rust build failed"
+            echo "❌ Error: Rust build failed - no executable found"
             ls -la target/release/
             exit 1
           fi
@@ -134,6 +136,8 @@ jobs:
           ## 注释
           
           MT7621.MUSL 版本主要用于路由器，由于 Rust 对 Musl 支持有限，此架构使用 C-lang 编译。
+          
+          Rust (Native) 版本和 C 语言版本都已支持多端口发送（端口9、7、0），以提高在不同路由器环境下的唤醒成功率。
           
           | 架构 | 文件大小 (MB) |
           |------|---------------|
