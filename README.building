@@ -1,0 +1,75 @@
+# Building Instructions for wowlan
+
+## Overview
+This project provides multiple implementations of a Wake-on-LAN (WOL) utility:
+- C version (fixed for better compatibility)
+- MUSL version for MT7621 (OpenWRT routers)
+- Rust version
+
+## C Version (Fixed)
+The C version has been updated to send WOL packets to multiple ports (9, 7, 0) to increase compatibility with different router configurations.
+
+### Build
+```bash
+gcc -o wowlan src/main.c
+```
+
+## MUSL Version for MT7621
+For OpenWRT routers using MT7621 chipset with MUSL libc, you can build a static binary.
+
+### Prerequisites
+- musl-gcc (install with `apt-get install musl-tools` or `apk add musl-tools`)
+
+### Build
+```bash
+musl-gcc -static -Os -o wowlan-mt7621 src/main.c
+```
+
+### Using Docker for Cross-compilation
+If building on a different architecture, use the provided Dockerfile:
+
+```bash
+docker build -f Dockerfile.musl -t wowlan-musl .
+docker run --rm -v $(pwd):/output wowlan-musl cp /app/wowlan-mt7621 /output/
+```
+
+## Rust Version
+The Rust implementation provides the same functionality with better memory safety.
+
+### Prerequisites
+- Rust toolchain (install with https://rustup.rs/)
+
+### Build
+```bash
+# Using rustc directly
+rustc -O --out-dir . src/main.rs
+mv main wowlan-rust
+
+# Or using cargo
+cargo build --release
+cp target/release/wowlan wowlan-rust
+```
+
+## Using the Makefile
+A Makefile is provided for convenient building:
+
+```bash
+make                    # Build all versions
+make wowlan             # Build C version
+make wowlan-mt7621      # Build MUSL version
+make wowlan-rust        # Build Rust version
+make test               # Test all built binaries
+make clean              # Remove built binaries
+```
+
+## Running
+All versions accept the same arguments:
+```bash
+./wowlan <MAC_ADDRESS> <SUBNET_CIDR>
+./wowlan E4:3A:6E:84:4E:85 192.168.123.0/24
+```
+
+## Changes Made to Fix C Version
+- Send to multiple ports (9, 7, 0) to increase compatibility
+- Removed early return on sendto error, allowing attempts on other ports
+- Added better error handling for different port attempts

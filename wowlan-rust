@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "Error: Rust compiler not found. Please install rustc to build Rust version.";
