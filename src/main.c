@@ -12,6 +12,8 @@
 
  #define MAGIC_PACKET_SIZE 102
  #define BROADCAST_PORT 9
+ #define BROADCAST_PORT_ALT 7
+ #define BROADCAST_PORT_ALT2 0
 
  // 错误类型枚举
  typedef enum {
@@ -126,23 +128,30 @@
          return ERROR_SOCKET;
      }
 
-     // 设置目标地址端口
-     struct sockaddr_in target_addr = *broadcast_addr;
-     target_addr.sin_port = htons(BROADCAST_PORT);
+     // 尝试发送到多个端口以提高兼容性
+     int ports[] = {BROADCAST_PORT, BROADCAST_PORT_ALT, BROADCAST_PORT_ALT2};
+     int num_ports = sizeof(ports) / sizeof(ports[0]);
+     
+     for (int i = 0; i < num_ports; i++) {
+         // 设置目标地址端口
+         struct sockaddr_in target_addr = *broadcast_addr;
+         target_addr.sin_port = htons(ports[i]);
 
-     // 发送数据包
-     ssize_t sent = sendto(sock, magic_packet, sizeof(magic_packet), 0,
-                          (struct sockaddr*)&target_addr, sizeof(target_addr));
+         // 发送数据包
+         ssize_t sent = sendto(sock, magic_packet, sizeof(magic_packet), 0,
+                              (struct sockaddr*)&target_addr, sizeof(target_addr));
 
-     if (sent != sizeof(magic_packet)) {
-         if (sent == -1) {
-             perror("sendto");
-             printf("Error code: %d, Message: %s\n", errno, strerror(errno));
+         if (sent != sizeof(magic_packet)) {
+             if (sent == -1) {
+                 // 打印错误但继续尝试其他端口
+                 fprintf(stderr, "sendto port %d failed: %s\n", ports[i], strerror(errno));
+             } else {
+                 fprintf(stderr, "sendto port %d: sent %zd bytes instead of %zu\n", ports[i], sent, sizeof(magic_packet));
+             }
          } else {
-             fprintf(stderr, "sendto: sent %zd bytes instead of %zu\n", sent, sizeof(magic_packet));
+             // 成功发送到一个端口就认为成功
+             // printf("Sent WOL packet to port %d\n", ports[i]);
          }
-         close(sock);
-         return ERROR_SOCKET;
      }
 
      close(sock);

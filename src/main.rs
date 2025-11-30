@@ -164,10 +164,21 @@ fn send_magic_packet(mac: [u8; 6], broadcast_addr: IpAddr) -> Result<(), std::io
     // 启用广播模式
     socket.set_broadcast(true)?;
 
-    // WOL UDP端口 9
-    let dest_addr = (ipv4_addr, 9);
-
-    socket.send_to(&magic_packet, dest_addr)?;
+    // 尝试发送到多个端口以提高兼容性
+    let ports = [9, 7, 0]; // 常见的WOL端口
+    
+    for port in &ports {
+        let dest_addr = (ipv4_addr, *port);
+        match socket.send_to(&magic_packet, dest_addr) {
+            Ok(_) => {
+                // 成功发送到一个端口
+                eprintln!("WOL packet sent to port {}", port);
+            },
+            Err(e) => {
+                eprintln!("Failed to send WOL packet to port {}: {}", port, e);
+            }
+        }
+    }
 
     Ok(())
 }
