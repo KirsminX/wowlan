@@ -101,14 +101,27 @@ jobs:
           rustc --version
           cargo build --release
           
+          # 确保release-assets目录存在
+          mkdir -p release-assets
+          
           # 检查编译结果 - 查找target/release目录下的可执行文件
-          if [ -f "target/release/wowlan" ]; then
-            cp target/release/wowlan release-assets/wowlan-rust
-          elif [ -f "target/release/wowlan.exe" ]; then
-            cp target/release/wowlan.exe release-assets/wowlan-rust
+          # 显示target/release目录内容以调试
+          echo "Contents of target/release/:"
+          ls -la target/release/ || echo "target/release directory does not exist yet"
+          
+          # 查找可能的可执行文件名
+          if ls target/release/wowlan* 1> /dev/null 2>&1; then
+            # 在target/release目录中查找wowlan相关的可执行文件
+            for file in target/release/wowlan*; do
+              if [[ -f "$file" && ! "$file" =~ \.d$ && ! "$file" =~ \.rmeta$ ]]; then
+                cp "$file" release-assets/wowlan-rust
+                echo "Copied $file to release-assets/wowlan-rust"
+                break
+              fi
+            done
           else
             echo "❌ Error: Rust build failed - no executable found"
-            ls -la target/release/
+            find target/release/ -type f -executable 2>/dev/null || echo "No executable files found"
             exit 1
           fi
         shell: bash
@@ -137,7 +150,7 @@ jobs:
           
           MT7621.MUSL 版本主要用于路由器，由于 Rust 对 Musl 支持有限，此架构使用 C-lang 编译。
           
-          Rust (Native) 版本和 C 语言版本都已支持多端口发送（端口9、7、0），以提高在不同路由器环境下的唤醒成功率。
+          Rust (Native) 版本和 C 语言版本都已支持多端口发送（端口9、7、0），以提高在不同路由器环境下的唤醒成功率。现在程序会尝试发送到多个端口，增加了WOL唤醒的成功率。
           
           | 架构 | 文件大小 (MB) |
           |------|---------------|
