@@ -1,25 +1,55 @@
 ```
 # Compiled and build artifacts
+target/
 *.o
 *.obj
+*.exe
+*.dll
+*.so
+*.a
 *.out
-wowlan
-wowlan-mt7621
-wowlan-rust/
-wowlan_c/
-wowlan_c_fixed/
+
+# Dependencies
+Cargo.lock
+**/vendor/
+**/deps/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 
+# Editors
+.vscode/
+.idea/
+
 # Environment
 .env
 .env.local
 .env.*
 
-# Editors
-.vscode/
-.idea/
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python (if present)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage*
+.nox/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+cython_debug/
 ```

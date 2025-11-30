@@ -95,6 +95,20 @@ jobs:
           
           mkdir -p release-assets
           cp wowlan-mt7621-musl release-assets/
+
+      - name: 编译 Rust 版本
+        run: |
+          rustc --version
+          cargo build --release
+          
+          # 检查编译结果
+          if [ -f "target/release/wowlan" ]; then
+            cp target/release/wowlan release-assets/wowlan-rust
+          else
+            echo "❌ Error: Rust build failed"
+            ls -la target/release/
+            exit 1
+          fi
         shell: bash
 
       - name: 准备发布资源
@@ -104,6 +118,7 @@ jobs:
           cp target/i686-pc-windows-gnu/release/wowlan.exe release-assets/wowlan-windows-x32.exe
           cp target/x86_64-unknown-linux-gnu/release/wowlan release-assets/wowlan-linux-x64
           cp target/aarch64-unknown-linux-gnu/release/wowlan release-assets/wowlan-linux-arm64
+          # Rust版本已经在编译步骤中复制到release-assets，所以不需要再次复制
           
           echo "✅ Release assets:"
           ls -lh release-assets/
@@ -127,6 +142,7 @@ jobs:
           | Linux x64 | $(ls -l release-assets/wowlan-linux-x64 | awk '{printf "%.1f", $5/1048576}') |
           | Linux arm64 | $(ls -l release-assets/wowlan-linux-arm64 | awk '{printf "%.1f", $5/1048576}') |
           | MT7621.MUSL | $(ls -l release-assets/wowlan-mt7621-musl | awk '{printf "%.1f", $5/1048576}') |
+          | Rust (Native) | $(ls -l release-assets/wowlan-rust | awk '{printf "%.1f", $5/1048576}') |
           EOF
           echo "body_path=body.md" >> $GITHUB_OUTPUT
 
